@@ -15,6 +15,9 @@ import {
   FaExclamationTriangle,
   FaPrint,
   FaDownload,
+  FaSearch,
+  FaFilter,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { pharmacyAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
@@ -22,17 +25,22 @@ import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate, formatCurrency } from "../../Utils/helpers.js";
+import { Link } from "react-router-dom";
 
 const PharmacyOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusUpdate, setStatusUpdate] = useState("");
   const [deliveryPartner, setDeliveryPartner] = useState("");
   const [estimatedTime, setEstimatedTime] = useState("");
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [dateRange, setDateRange] = useState({
+    start: "",
+    end: "",
+  });
 
   useEffect(() => {
     fetchOrders();
@@ -41,8 +49,10 @@ const PharmacyOrders = () => {
   const fetchOrders = async () => {
     try {
       const response = await pharmacyAPI.getOrders();
-      setOrders(response.data.data);
+      console.log("Pharmacy orders:", response.data);
+      setOrders(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load orders:", error);
       toast.error("Failed to load orders");
     } finally {
       setLoading(false);
@@ -61,46 +71,113 @@ const PharmacyOrders = () => {
         deliveryPartner,
         estimatedDeliveryTime: estimatedTime,
       });
-      toast.success(`Order status updated to ${statusUpdate}`);
+      toast.success(
+        `Order status updated to ${statusUpdate.replace("_", " ")}`,
+      );
       setShowStatusModal(false);
       setStatusUpdate("");
       setDeliveryPartner("");
       setEstimatedTime("");
       fetchOrders();
     } catch (error) {
+      console.error("Failed to update order:", error);
       toast.error("Failed to update order status");
     }
+  };
+
+  const handlePrintInvoice = (order) => {
+    const invoiceWindow = window.open("", "_blank");
+    invoiceWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice #${order.orderId}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .details { margin-bottom: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+            .total { font-size: 18px; font-weight: bold; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Invoice</h1>
+            <p>Order #${order.orderId}</p>
+            <p>Date: ${new Date(order.createdAt).toLocaleDateString()}</p>
+          </div>
+          <div class="details">
+            <h3>Customer Details</h3>
+            <p>Name: ${order.patientId?.userId?.name}</p>
+            <p>Phone: ${order.patientId?.userId?.phone}</p>
+            <p>Address: ${order.deliveryAddress?.address}, ${order.deliveryAddress?.city}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${order.items
+                ?.map(
+                  (item) => `
+                <tr>
+                  <td>${item.name}</td>
+                  <td>${item.quantity}</td>
+                  <td>₹${item.price}</td>
+                  <td>₹${item.price * item.quantity}</td>
+                </tr>
+              `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+          <div class="total">
+            <p>Subtotal: ₹${order.subtotal}</p>
+            <p>Delivery: ₹${order.deliveryCharges}</p>
+            <p>Tax: ₹${order.taxAmount}</p>
+            <p>Total: ₹${order.totalAmount}</p>
+          </div>
+        </body>
+      </html>
+    `);
+    invoiceWindow.document.close();
+    invoiceWindow.print();
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
       case "delivered":
-        return <FaCheckCircle className="w-5 h-5 text-success-500" />;
+        return <FaCheckCircle className="w-5 h-5 text-green-500" />;
       case "cancelled":
-        return <FaTimesCircle className="w-5 h-5 text-error-500" />;
+        return <FaTimesCircle className="w-5 h-5 text-red-500" />;
       case "out_for_delivery":
-        return <FaTruck className="w-5 h-5 text-primary-500" />;
+        return <FaTruck className="w-5 h-5 text-blue-500" />;
       case "preparing":
-        return <FaClock className="w-5 h-5 text-warning-500" />;
+        return <FaClock className="w-5 h-5 text-yellow-500" />;
       case "ready":
-        return <FaCheck className="w-5 h-5 text-success-500" />;
+        return <FaCheck className="w-5 h-5 text-green-500" />;
       default:
-        return <FaClock className="w-5 h-5 text-warning-500" />;
+        return <FaClock className="w-5 h-5 text-yellow-500" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case "delivered":
-        return "bg-success-100 text-success-700 border-success-200";
+        return "bg-green-100 text-green-700 border-green-200";
       case "cancelled":
-        return "bg-error-100 text-error-700 border-error-200";
+        return "bg-red-100 text-red-700 border-red-200";
       case "out_for_delivery":
-        return "bg-primary-100 text-primary-700 border-primary-200";
+        return "bg-blue-100 text-blue-700 border-blue-200";
       case "preparing":
-        return "bg-warning-100 text-warning-700 border-warning-200";
+        return "bg-yellow-100 text-yellow-700 border-yellow-200";
       case "ready":
-        return "bg-success-100 text-success-700 border-success-200";
+        return "bg-green-100 text-green-700 border-green-200";
       default:
         return "bg-gray-100 text-gray-700 border-gray-200";
     }
@@ -136,9 +213,36 @@ const PharmacyOrders = () => {
   };
 
   const filteredOrders = orders.filter((order) => {
-    if (filter === "all") return true;
-    return order.status === filter;
+    if (filter !== "all" && order.status !== filter) return false;
+
+    if (searchTerm) {
+      const orderId = order.orderId?.toLowerCase() || "";
+      const customerName = order.patientId?.userId?.name?.toLowerCase() || "";
+      return (
+        orderId.includes(searchTerm.toLowerCase()) ||
+        customerName.includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (dateRange.start && dateRange.end) {
+      const orderDate = new Date(order.createdAt);
+      const start = new Date(dateRange.start);
+      const end = new Date(dateRange.end);
+      return orderDate >= start && orderDate <= end;
+    }
+
+    return true;
   });
+
+  const orderStats = {
+    pending: orders.filter((o) => o.status === "pending").length,
+    preparing: orders.filter((o) => o.status === "preparing").length,
+    outForDelivery: orders.filter((o) => o.status === "out_for_delivery")
+      .length,
+    delivered: orders.filter((o) => o.status === "delivered").length,
+    cancelled: orders.filter((o) => o.status === "cancelled").length,
+    total: orders.length,
+  };
 
   if (loading) {
     return <PulseLoader size="lg" color="primary" />;
@@ -156,33 +260,103 @@ const PharmacyOrders = () => {
             Process and track customer orders
           </p>
         </div>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Order Statistics */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-primary-600">
+            {orderStats.total}
+          </p>
+          <p className="text-xs text-secondary-600">Total</p>
+        </Card>
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-yellow-600">
+            {orderStats.pending}
+          </p>
+          <p className="text-xs text-secondary-600">Pending</p>
+        </Card>
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-blue-600">
+            {orderStats.preparing}
+          </p>
+          <p className="text-xs text-secondary-600">Preparing</p>
+        </Card>
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-purple-600">
+            {orderStats.outForDelivery}
+          </p>
+          <p className="text-xs text-secondary-600">Out for Delivery</p>
+        </Card>
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-green-600">
+            {orderStats.delivered}
+          </p>
+          <p className="text-xs text-secondary-600">Delivered</p>
+        </Card>
+        <Card className="text-center p-4">
+          <p className="text-2xl font-display font-bold text-red-600">
+            {orderStats.cancelled}
+          </p>
+          <p className="text-xs text-secondary-600">Cancelled</p>
+        </Card>
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-2 overflow-x-auto pb-2">
-        {[
-          "all",
-          "pending",
-          "confirmed",
-          "preparing",
-          "ready",
-          "out_for_delivery",
-          "delivered",
-          "cancelled",
-        ].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-full text-sm font-medium capitalize whitespace-nowrap transition-all ${
-              filter === status
-                ? "gradient-bg text-white shadow-medium"
-                : "bg-gray-100 text-secondary-600 hover:bg-gray-200"
-            }`}
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search by order ID or customer name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
           >
-            {status.replace("_", " ")}
-          </button>
-        ))}
-      </div>
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="preparing">Preparing</option>
+            <option value="ready">Ready</option>
+            <option value="out_for_delivery">Out for Delivery</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="date"
+              value={dateRange.start}
+              onChange={(e) =>
+                setDateRange({ ...dateRange, start: e.target.value })
+              }
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+            />
+            <span className="text-secondary-400">to</span>
+            <input
+              type="date"
+              value={dateRange.end}
+              onChange={(e) =>
+                setDateRange({ ...dateRange, end: e.target.value })
+              }
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+      </Card>
 
       {/* Orders List */}
       {filteredOrders.length === 0 ? (
@@ -192,9 +366,9 @@ const PharmacyOrders = () => {
             No orders found
           </h3>
           <p className="text-secondary-600">
-            {filter === "all"
-              ? "No orders received yet"
-              : `No ${filter} orders`}
+            {searchTerm
+              ? "Try adjusting your search"
+              : "No orders received yet"}
           </p>
         </Card>
       ) : (
@@ -204,14 +378,14 @@ const PharmacyOrders = () => {
               key={order._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Card>
                 <div className="flex flex-col space-y-4">
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 gradient-bg rounded-lg">
+                      <div className="p-2 bg-gradient-to-r from-primary-600 to-teal-600 rounded-lg">
                         <FaBox className="w-4 h-4 text-white" />
                       </div>
                       <div>
@@ -228,58 +402,64 @@ const PharmacyOrders = () => {
                   </div>
 
                   {/* Customer Info */}
-                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                     <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
                       <FaUser className="w-5 h-5 text-primary-600" />
                     </div>
                     <div className="flex-1">
                       <p className="font-medium">
-                        {order.patientId?.userId?.name}
+                        {order.patientId?.userId?.name || "Customer"}
                       </p>
                       <p className="text-xs text-secondary-500">
                         {order.patientId?.userId?.phone}
                       </p>
                     </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium flex items-center">
+                        <FaRupeeSign className="w-3 h-3" />
+                        {order.totalAmount}
+                      </p>
+                      <p className="text-xs text-secondary-500">
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Items Summary */}
+                  {/* Items Preview */}
                   <div>
                     <p className="text-sm font-medium mb-2">
-                      Items ({order.items.length})
+                      Items ({order.items?.length || 0})
                     </p>
-                    <div className="space-y-2">
-                      {order.items.slice(0, 2).map((item, idx) => (
-                        <div
+                    <div className="flex flex-wrap gap-2">
+                      {order.items?.slice(0, 3).map((item, idx) => (
+                        <span
                           key={idx}
-                          className="flex items-center justify-between text-sm"
+                          className="px-2 py-1 bg-primary-50 text-primary-700 rounded-full text-xs"
                         >
-                          <span>
-                            {item.name} x{item.quantity}
-                          </span>
-                          <span className="font-medium flex items-center">
-                            <FaRupeeSign className="w-3 h-3" />
-                            {item.price * item.quantity}
-                          </span>
-                        </div>
+                          {item.name} x{item.quantity}
+                        </span>
                       ))}
-                      {order.items.length > 2 && (
-                        <p className="text-xs text-secondary-500">
-                          +{order.items.length - 2} more items
-                        </p>
+                      {order.items?.length > 3 && (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
+                          +{order.items.length - 3} more
+                        </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Total & Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div>
-                      <p className="text-sm text-secondary-500">Total Amount</p>
-                      <p className="text-lg font-display font-bold text-primary-600 flex items-center">
-                        <FaRupeeSign className="w-4 h-4" />
-                        {order.totalAmount}
-                      </p>
+                  {/* Delivery Address Preview */}
+                  {order.deliveryAddress && (
+                    <div className="flex items-start space-x-2 text-xs text-secondary-600">
+                      <FaMapMarkerAlt className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <span className="truncate">
+                        {order.deliveryAddress.address},{" "}
+                        {order.deliveryAddress.city}
+                      </span>
                     </div>
+                  )}
 
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-2 border-t">
                     <div className="flex space-x-2">
                       <Button
                         variant="outline"
@@ -302,40 +482,22 @@ const PharmacyOrders = () => {
                         </Button>
                       )}
 
-                      {order.status === "ready" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          icon={FaTruck}
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setStatusUpdate("out_for_delivery");
-                            setShowStatusModal(true);
-                          }}
-                        >
-                          Dispatch
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={FaPrint}
+                        onClick={() => handlePrintInvoice(order)}
+                      >
+                        Invoice
+                      </Button>
                     </div>
-                  </div>
 
-                  {/* Delivery Info */}
-                  {order.estimatedDeliveryTime && (
-                    <div className="flex items-center space-x-2 text-xs text-primary-600 bg-primary-50 p-2 rounded-lg">
-                      <FaClock />
-                      <span>
-                        Est. delivery: {formatDate(order.estimatedDeliveryTime)}
+                    {order.status === "ready" && (
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                        Ready for pickup
                       </span>
-                    </div>
-                  )}
-
-                  {/* Urgent Orders */}
-                  {order.status === "pending" && (
-                    <div className="flex items-center space-x-2 text-xs text-warning-600 bg-warning-50 p-2 rounded-lg">
-                      <FaExclamationTriangle />
-                      <span>Pending for over 30 minutes</span>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </Card>
             </motion.div>
@@ -367,7 +529,7 @@ const PharmacyOrders = () => {
             </div>
 
             {/* Customer Details */}
-            <div className="p-4 bg-gray-50 rounded-xl">
+            <div className="p-4 bg-gray-50 rounded-lg">
               <h3 className="font-medium mb-3">Customer Details</h3>
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
@@ -381,11 +543,11 @@ const PharmacyOrders = () => {
                 <div className="flex items-start space-x-2">
                   <FaMapMarkerAlt className="w-4 h-4 text-primary-500 mt-1" />
                   <div>
-                    <p>{selectedOrder.deliveryAddress.address}</p>
+                    <p>{selectedOrder.deliveryAddress?.address}</p>
                     <p className="text-sm text-secondary-600">
-                      {selectedOrder.deliveryAddress.city},{" "}
-                      {selectedOrder.deliveryAddress.state} -{" "}
-                      {selectedOrder.deliveryAddress.pincode}
+                      {selectedOrder.deliveryAddress?.city},{" "}
+                      {selectedOrder.deliveryAddress?.state} -{" "}
+                      {selectedOrder.deliveryAddress?.pincode}
                     </p>
                   </div>
                 </div>
@@ -396,10 +558,10 @@ const PharmacyOrders = () => {
             <div>
               <h3 className="font-medium mb-3">Order Items</h3>
               <div className="space-y-3">
-                {selectedOrder.items.map((item, idx) => (
+                {selectedOrder.items?.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
@@ -417,8 +579,9 @@ const PharmacyOrders = () => {
                         )}
                       </div>
                       {item.expiryDate && (
-                        <p className="text-xs text-warning-600 mt-1">
-                          Expires: {formatDate(item.expiryDate)}
+                        <p className="text-xs text-orange-600 mt-1">
+                          Expires:{" "}
+                          {new Date(item.expiryDate).toLocaleDateString()}
                         </p>
                       )}
                     </div>
@@ -438,7 +601,7 @@ const PharmacyOrders = () => {
                   </span>
                 </div>
                 {selectedOrder.discountAmount > 0 && (
-                  <div className="flex justify-between text-sm text-success-600">
+                  <div className="flex justify-between text-sm text-green-600">
                     <span>Discount</span>
                     <span>- ₹{selectedOrder.discountAmount}</span>
                   </div>
@@ -468,7 +631,7 @@ const PharmacyOrders = () => {
             </div>
 
             {/* Payment Info */}
-            <div className="p-4 bg-gray-50 rounded-xl">
+            <div className="p-4 bg-gray-50 rounded-lg">
               <h3 className="font-medium mb-2">Payment Information</h3>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
@@ -482,8 +645,8 @@ const PharmacyOrders = () => {
                   <span
                     className={`font-medium ${
                       selectedOrder.paymentStatus === "completed"
-                        ? "text-success-600"
-                        : "text-warning-600"
+                        ? "text-green-600"
+                        : "text-yellow-600"
                     }`}
                   >
                     {selectedOrder.paymentStatus}
@@ -500,26 +663,6 @@ const PharmacyOrders = () => {
               </div>
             </div>
 
-            {/* Prescription Link */}
-            {selectedOrder.prescriptionId && (
-              <div className="p-4 bg-primary-50 rounded-xl">
-                <p className="font-medium mb-2">Prescription Attached</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() =>
-                    window.open(
-                      `/prescriptions/${selectedOrder.prescriptionId}`,
-                      "_blank",
-                    )
-                  }
-                >
-                  View Prescription
-                </Button>
-              </div>
-            )}
-
             {/* Tracking History */}
             {selectedOrder.trackingHistory?.length > 0 && (
               <div>
@@ -533,7 +676,7 @@ const PharmacyOrders = () => {
                           {track.status.replace("_", " ")}
                         </p>
                         <p className="text-xs text-secondary-500">
-                          {formatDate(track.timestamp)}
+                          {new Date(track.timestamp).toLocaleString()}
                         </p>
                         {track.note && (
                           <p className="text-sm text-secondary-600 mt-1">
@@ -546,28 +689,6 @@ const PharmacyOrders = () => {
                 </div>
               </div>
             )}
-
-            {/* Actions */}
-            <div className="flex space-x-3 pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                icon={FaPrint}
-                onClick={() => window.print()}
-              >
-                Print
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                icon={FaDownload}
-                onClick={() => {
-                  /* Download invoice */
-                }}
-              >
-                Invoice
-              </Button>
-            </div>
           </div>
         )}
       </Modal>
@@ -641,7 +762,6 @@ const PharmacyOrders = () => {
               Cancel
             </Button>
             <Button
-              variant="primary"
               className="flex-1"
               onClick={handleUpdateStatus}
               disabled={!statusUpdate}

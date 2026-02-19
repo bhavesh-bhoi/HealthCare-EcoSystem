@@ -11,6 +11,9 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaStethoscope,
+  FaFilter,
+  FaSearch,
+  FaNotesMedical,
 } from "react-icons/fa";
 import { MdPending } from "react-icons/md";
 import { doctorAPI } from "../../services/api.js";
@@ -19,7 +22,6 @@ import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate, formatTime } from "../../Utils/helpers.js";
 
 const DoctorAppointments = () => {
   const [appointments, setAppointments] = useState([]);
@@ -28,12 +30,13 @@ const DoctorAppointments = () => {
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [consultationNotes, setConsultationNotes] = useState("");
   const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [prescription, setPrescription] = useState({
     diagnosis: "",
     medicines: [],
     tests: [],
     notes: "",
-    followUpDate: null,
+    followUpDate: "",
   });
 
   useEffect(() => {
@@ -43,8 +46,10 @@ const DoctorAppointments = () => {
   const fetchAppointments = async () => {
     try {
       const response = await doctorAPI.getAppointments();
-      setAppointments(response.data.data);
+      console.log("Doctor appointments:", response.data);
+      setAppointments(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load appointments:", error);
       toast.error("Failed to load appointments");
     } finally {
       setLoading(false);
@@ -53,8 +58,13 @@ const DoctorAppointments = () => {
 
   const handleUpdateStatus = async (appointmentId, status) => {
     try {
-      await doctorAPI.updateAppointmentStatus(appointmentId, status);
+      await doctorAPI.updateAppointmentStatus(
+        appointmentId,
+        status,
+        consultationNotes,
+      );
       toast.success(`Appointment ${status}`);
+      setShowConsultModal(false);
       fetchAppointments();
     } catch (error) {
       toast.error("Failed to update appointment");
@@ -84,7 +94,7 @@ const DoctorAppointments = () => {
         medicines: [],
         tests: [],
         notes: "",
-        followUpDate: null,
+        followUpDate: "",
       });
       fetchAppointments();
     } catch (error) {
@@ -116,13 +126,13 @@ const DoctorAppointments = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case "confirmed":
-        return <FaCheckCircle className="w-5 h-5 text-success-500" />;
+        return <FaCheckCircle className="w-5 h-5 text-green-500" />;
       case "pending":
-        return <MdPending className="w-5 h-5 text-warning-500" />;
+        return <MdPending className="w-5 h-5 text-yellow-500" />;
       case "cancelled":
-        return <FaTimesCircle className="w-5 h-5 text-error-500" />;
+        return <FaTimesCircle className="w-5 h-5 text-red-500" />;
       case "completed":
-        return <FaCheckCircle className="w-5 h-5 text-primary-500" />;
+        return <FaCheckCircle className="w-5 h-5 text-blue-500" />;
       default:
         return null;
     }
@@ -131,21 +141,25 @@ const DoctorAppointments = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case "confirmed":
-        return "bg-success-100 text-success-700";
+        return "bg-green-100 text-green-700";
       case "pending":
-        return "bg-warning-100 text-warning-700";
+        return "bg-yellow-100 text-yellow-700";
       case "cancelled":
-        return "bg-error-100 text-error-700";
+        return "bg-red-100 text-red-700";
       case "completed":
-        return "bg-primary-100 text-primary-700";
+        return "bg-blue-100 text-blue-700";
       default:
         return "bg-gray-100 text-gray-700";
     }
   };
 
-  const filteredAppointments = appointments.filter((app) => {
-    if (filter === "all") return true;
-    return app.status === filter;
+  const filteredAppointments = appointments.filter((apt) => {
+    if (filter !== "all" && apt.status !== filter) return false;
+    if (searchTerm) {
+      const patientName = apt.patientId?.userId?.name?.toLowerCase() || "";
+      return patientName.includes(searchTerm.toLowerCase());
+    }
+    return true;
   });
 
   if (loading) {
@@ -165,23 +179,31 @@ const DoctorAppointments = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-2 overflow-x-auto pb-2">
-        {["all", "pending", "confirmed", "completed", "cancelled"].map(
-          (status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium capitalize transition-all ${
-                filter === status
-                  ? "gradient-bg text-white shadow-medium"
-                  : "bg-gray-100 text-secondary-600 hover:bg-gray-200"
-              }`}
-            >
-              {status}
-            </button>
-          ),
-        )}
-      </div>
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search by patient name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+          >
+            <option value="all">All Appointments</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </Card>
 
       {/* Appointments List */}
       {filteredAppointments.length === 0 ? (
@@ -191,9 +213,9 @@ const DoctorAppointments = () => {
             No appointments found
           </h3>
           <p className="text-secondary-600">
-            {filter === "all"
-              ? "No appointments scheduled"
-              : `No ${filter} appointments`}
+            {searchTerm
+              ? "Try adjusting your search"
+              : "No appointments scheduled"}
           </p>
         </Card>
       ) : (
@@ -203,14 +225,14 @@ const DoctorAppointments = () => {
               key={appointment._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Card>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   {/* Patient Info */}
                   <div className="flex items-center space-x-4">
                     <div className="relative">
-                      <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-r from-primary-600 to-teal-600 flex items-center justify-center">
                         <FaUser className="w-8 h-8 text-white" />
                       </div>
                       <div className="absolute -bottom-1 -right-1">
@@ -219,12 +241,17 @@ const DoctorAppointments = () => {
                     </div>
                     <div>
                       <h3 className="font-display font-semibold text-secondary-800">
-                        {appointment.patientId?.userId?.name}
+                        {appointment.patientId?.userId?.name || "Patient Name"}
                       </h3>
                       <p className="text-sm text-secondary-600">
-                        Age: {appointment.patientId?.age} •{" "}
-                        {appointment.patientId?.gender}
+                        Age: {appointment.patientId?.age || "N/A"} •{" "}
+                        {appointment.patientId?.gender || "N/A"}
                       </p>
+                      {appointment.patientId?.bloodGroup && (
+                        <p className="text-xs text-primary-600 mt-1">
+                          Blood Group: {appointment.patientId.bloodGroup}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -233,14 +260,12 @@ const DoctorAppointments = () => {
                     <div className="flex items-center space-x-2">
                       <FaCalendarCheck className="w-4 h-4 text-primary-500" />
                       <span className="text-sm">
-                        {formatDate(appointment.date)}
+                        {new Date(appointment.date).toLocaleDateString()}
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <FaClock className="w-4 h-4 text-primary-500" />
-                      <span className="text-sm">
-                        {formatTime(appointment.startTime)}
-                      </span>
+                      <span className="text-sm">{appointment.startTime}</span>
                     </div>
                   </div>
 
@@ -248,10 +273,10 @@ const DoctorAppointments = () => {
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-1 px-3 py-1 bg-gray-100 rounded-full">
                       {appointment.mode === "online" && (
-                        <FaVideo className="w-3 h-3 text-primary-500" />
+                        <FaVideo className="w-3 h-3 text-blue-500" />
                       )}
                       {appointment.mode === "home" && (
-                        <FaHome className="w-3 h-3 text-success-500" />
+                        <FaHome className="w-3 h-3 text-green-500" />
                       )}
                       {appointment.mode === "clinic" && (
                         <FaMapMarkerAlt className="w-3 h-3 text-orange-500" />
@@ -282,7 +307,7 @@ const DoctorAppointments = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-error-600"
+                          className="text-red-600"
                           onClick={() =>
                             handleUpdateStatus(appointment._id, "cancelled")
                           }
@@ -338,6 +363,18 @@ const DoctorAppointments = () => {
                       <span className="font-medium">Patient concern: </span>
                       {appointment.problem.description}
                     </p>
+                    {appointment.problem.symptoms?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {appointment.problem.symptoms.map((symptom, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-1 bg-primary-50 text-primary-700 rounded-full text-xs"
+                          >
+                            {symptom}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>
@@ -356,7 +393,7 @@ const DoctorAppointments = () => {
             medicines: [],
             tests: [],
             notes: "",
-            followUpDate: null,
+            followUpDate: "",
           });
         }}
         title="Add Prescription"
@@ -365,7 +402,7 @@ const DoctorAppointments = () => {
         <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
           {/* Patient Info */}
           {selectedAppointment && (
-            <div className="p-4 bg-primary-50 rounded-xl">
+            <div className="p-4 bg-primary-50 rounded-lg">
               <p className="font-medium">
                 Patient: {selectedAppointment.patientId?.userId?.name}
               </p>
@@ -403,10 +440,10 @@ const DoctorAppointments = () => {
             </div>
             <div className="space-y-3">
               {prescription.medicines.map((medicine, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-xl relative">
+                <div key={index} className="p-3 bg-gray-50 rounded-lg relative">
                   <button
                     onClick={() => removeMedicine(index)}
-                    className="absolute top-2 right-2 text-error-500 hover:text-error-600"
+                    className="absolute top-2 right-2 text-red-500 hover:text-red-600"
                   >
                     <FaTimesCircle />
                   </button>
@@ -499,13 +536,14 @@ const DoctorAppointments = () => {
             <input
               type="date"
               className="input-field"
-              value={prescription.followUpDate || ""}
+              value={prescription.followUpDate}
               onChange={(e) =>
                 setPrescription({
                   ...prescription,
                   followUpDate: e.target.value,
                 })
               }
+              min={new Date().toISOString().split("T")[0]}
             />
           </div>
 
@@ -518,11 +556,7 @@ const DoctorAppointments = () => {
             >
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              className="flex-1"
-              onClick={handleSubmitPrescription}
-            >
+            <Button className="flex-1" onClick={handleSubmitPrescription}>
               Save Prescription
             </Button>
           </div>

@@ -11,6 +11,12 @@ import {
   FaHeartbeat,
   FaAllergies,
   FaNotesMedical,
+  FaPhone,
+  FaEnvelope,
+  FaMapMarkerAlt,
+  FaClock,
+  FaPrescription,
+  FaStethoscope,
 } from "react-icons/fa";
 import { doctorAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
@@ -18,15 +24,15 @@ import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate, calculateAge } from "../../Utils/helpers.js";
 
-const Patients = () => {
+const DoctorPatients = () => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientHistory, setPatientHistory] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   useEffect(() => {
     fetchPatients();
@@ -34,10 +40,11 @@ const Patients = () => {
 
   const fetchPatients = async () => {
     try {
-      // This endpoint might need to be implemented in your backend
       const response = await doctorAPI.getPatients();
-      setPatients(response.data.data);
+      console.log("Patients:", response.data);
+      setPatients(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load patients:", error);
       toast.error("Failed to load patients");
     } finally {
       setLoading(false);
@@ -47,8 +54,11 @@ const Patients = () => {
   const fetchPatientHistory = async (patientId) => {
     try {
       const response = await doctorAPI.getPatientHistory(patientId);
+      console.log("Patient history:", response.data);
       setPatientHistory(response.data.data);
+      setShowHistoryModal(true);
     } catch (error) {
+      console.error("Failed to load patient history:", error);
       toast.error("Failed to load patient history");
     }
   };
@@ -61,13 +71,16 @@ const Patients = () => {
   const filteredPatients = patients.filter((patient) => {
     const matchesSearch =
       patient.userId?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      patient.userId?.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      patient.userId?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      patient.bloodGroup?.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (filter === "all") return matchesSearch;
     if (filter === "recent") {
-      // Filter patients seen in last 30 days
-      // This would need actual appointment data
+      // Check if patient had appointment in last 30 days
       return matchesSearch;
+    }
+    if (filter === "chronic") {
+      return patient.medicalHistory?.length > 0 && matchesSearch;
     }
     return matchesSearch;
   });
@@ -87,27 +100,30 @@ const Patients = () => {
       </div>
 
       {/* Search and Filter */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
-          <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-secondary-400" />
-          <input
-            type="text"
-            placeholder="Search patients by name or email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="input-field pl-12"
-          />
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search patients by name, email, or blood group..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+          >
+            <option value="all">All Patients</option>
+            <option value="recent">Recent (30 days)</option>
+            <option value="chronic">Chronic Conditions</option>
+            <option value="new">New Patients</option>
+          </select>
         </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="input-field md:w-48"
-        >
-          <option value="all">All Patients</option>
-          <option value="recent">Recent (30 days)</option>
-          <option value="chronic">Chronic Conditions</option>
-        </select>
-      </div>
+      </Card>
 
       {/* Patients Grid */}
       {filteredPatients.length === 0 ? (
@@ -129,46 +145,59 @@ const Patients = () => {
               key={patient._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <Card className="h-full flex flex-col">
+              <Card className="h-full flex flex-col hover:shadow-lg transition-all">
                 <div className="flex items-start space-x-4 mb-4">
-                  <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">
-                      {patient.userId?.name?.charAt(0)}
-                    </span>
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-r from-primary-600 to-teal-600 flex items-center justify-center">
+                      <span className="text-2xl font-bold text-white">
+                        {patient.userId?.name?.charAt(0) || "P"}
+                      </span>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display font-semibold text-secondary-800">
-                      {patient.userId?.name}
+                      {patient.userId?.name || "Unknown"}
                     </h3>
                     <p className="text-sm text-secondary-600">
-                      Age: {calculateAge(patient.dateOfBirth)} •{" "}
-                      {patient.gender}
+                      Age: {patient.age || "N/A"} • {patient.gender || "N/A"}
                     </p>
-                    <p className="text-xs text-secondary-500 mt-1">
-                      Blood Group: {patient.bloodGroup || "N/A"}
-                    </p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full">
+                        {patient.bloodGroup || "B+"}
+                      </span>
+                      {patient.medicalHistory?.length > 0 && (
+                        <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-0.5 rounded-full">
+                          {patient.medicalHistory.length} conditions
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Quick Stats */}
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div className="p-2 bg-primary-50 rounded-lg text-center">
-                    <p className="text-xs text-secondary-500">Appointments</p>
-                    <p className="font-medium text-primary-600">12</p>
-                  </div>
-                  <div className="p-2 bg-success-50 rounded-lg text-center">
-                    <p className="text-xs text-secondary-500">Prescriptions</p>
-                    <p className="font-medium text-success-600">8</p>
-                  </div>
+                {/* Contact Info */}
+                <div className="space-y-2 mb-4">
+                  {patient.userId?.email && (
+                    <div className="flex items-center space-x-2 text-sm text-secondary-600">
+                      <FaEnvelope className="w-3 h-3" />
+                      <span className="truncate">{patient.userId.email}</span>
+                    </div>
+                  )}
+                  {patient.userId?.phone && (
+                    <div className="flex items-center space-x-2 text-sm text-secondary-600">
+                      <FaPhone className="w-3 h-3" />
+                      <span>{patient.userId.phone}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Medical History Preview */}
                 {patient.medicalHistory?.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-xs font-medium text-secondary-500 mb-1">
-                      Medical Conditions
+                    <p className="text-xs font-medium text-secondary-500 mb-1 flex items-center">
+                      <FaNotesMedical className="mr-1" /> Medical Conditions
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {patient.medicalHistory
@@ -176,13 +205,13 @@ const Patients = () => {
                         .map((condition, idx) => (
                           <span
                             key={idx}
-                            className="px-2 py-1 bg-gray-100 rounded-full text-xs"
+                            className="px-2 py-1 bg-red-50 text-red-700 rounded-full text-xs"
                           >
                             {condition.condition}
                           </span>
                         ))}
                       {patient.medicalHistory.length > 2 && (
-                        <span className="px-2 py-1 bg-gray-100 rounded-full text-xs">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
                           +{patient.medicalHistory.length - 2}
                         </span>
                       )}
@@ -193,14 +222,14 @@ const Patients = () => {
                 {/* Allergies Preview */}
                 {patient.allergies?.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-xs font-medium text-secondary-500 mb-1">
-                      Allergies
+                    <p className="text-xs font-medium text-secondary-500 mb-1 flex items-center">
+                      <FaAllergies className="mr-1" /> Allergies
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {patient.allergies.slice(0, 2).map((allergy, idx) => (
                         <span
                           key={idx}
-                          className="px-2 py-1 bg-error-50 text-error-700 rounded-full text-xs"
+                          className="px-2 py-1 bg-orange-50 text-orange-700 rounded-full text-xs"
                         >
                           {allergy.allergen}
                         </span>
@@ -237,8 +266,9 @@ const Patients = () => {
 
       {/* Patient History Modal */}
       <Modal
-        isOpen={selectedPatient}
+        isOpen={showHistoryModal}
         onClose={() => {
+          setShowHistoryModal(false);
           setSelectedPatient(null);
           setPatientHistory(null);
         }}
@@ -247,18 +277,36 @@ const Patients = () => {
       >
         {selectedPatient && patientHistory && (
           <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
-            {/* Patient Info */}
-            <div className="flex items-center space-x-4 p-4 gradient-bg rounded-xl text-white">
+            {/* Patient Header */}
+            <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-primary-600 to-teal-600 rounded-xl text-white">
               <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                <FaUser className="w-8 h-8" />
+                <span className="text-2xl font-bold">
+                  {selectedPatient.userId?.name?.charAt(0)}
+                </span>
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className="text-xl font-display font-semibold">
                   {selectedPatient.userId?.name}
                 </h3>
                 <p className="text-white/80">
-                  {calculateAge(selectedPatient.dateOfBirth)} years •{" "}
-                  {selectedPatient.gender} • {selectedPatient.bloodGroup}
+                  {selectedPatient.age} years • {selectedPatient.gender} •{" "}
+                  {selectedPatient.bloodGroup}
+                </p>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Email</p>
+                <p className="font-medium text-sm">
+                  {selectedPatient.userId?.email}
+                </p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Phone</p>
+                <p className="font-medium text-sm">
+                  {selectedPatient.userId?.phone}
                 </p>
               </div>
             </div>
@@ -272,7 +320,7 @@ const Patients = () => {
                 </h4>
                 <div className="space-y-3">
                   {selectedPatient.medicalHistory.map((condition, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl">
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium">
                           {condition.condition}
@@ -280,15 +328,16 @@ const Patients = () => {
                         <span
                           className={`px-2 py-1 rounded-full text-xs ${
                             condition.status === "active"
-                              ? "bg-warning-100 text-warning-700"
-                              : "bg-success-100 text-success-700"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-green-100 text-green-700"
                           }`}
                         >
                           {condition.status}
                         </span>
                       </div>
                       <p className="text-sm text-secondary-600">
-                        Diagnosed: {formatDate(condition.diagnosedDate)}
+                        Diagnosed:{" "}
+                        {new Date(condition.diagnosedDate).toLocaleDateString()}
                       </p>
                       {condition.medications?.length > 0 && (
                         <div className="mt-2">
@@ -317,19 +366,19 @@ const Patients = () => {
             {selectedPatient.allergies?.length > 0 && (
               <div>
                 <h4 className="font-medium mb-3 flex items-center space-x-2">
-                  <FaAllergies className="text-error-500" />
+                  <FaAllergies className="text-orange-500" />
                   <span>Allergies</span>
                 </h4>
                 <div className="space-y-2">
                   {selectedPatient.allergies.map((allergy, idx) => (
-                    <div key={idx} className="p-3 bg-error-50 rounded-xl">
+                    <div key={idx} className="p-3 bg-orange-50 rounded-lg">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">{allergy.allergen}</span>
                         <span
                           className={`px-2 py-1 rounded-full text-xs ${
                             allergy.severity === "severe"
-                              ? "bg-error-200 text-error-800"
-                              : "bg-warning-100 text-warning-700"
+                              ? "bg-red-200 text-red-800"
+                              : "bg-yellow-100 text-yellow-700"
                           }`}
                         >
                           {allergy.severity}
@@ -344,33 +393,39 @@ const Patients = () => {
               </div>
             )}
 
-            {/* Recent Appointments */}
+            {/* Previous Appointments */}
             {patientHistory.appointments?.length > 0 && (
               <div>
                 <h4 className="font-medium mb-3 flex items-center space-x-2">
                   <FaCalendarAlt className="text-primary-500" />
-                  <span>Recent Appointments</span>
+                  <span>Previous Appointments</span>
                 </h4>
                 <div className="space-y-2">
                   {patientHistory.appointments.slice(0, 5).map((apt, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl">
-                      <div className="flex items-center justify-between">
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
                         <span className="font-medium">
-                          {formatDate(apt.date)}
+                          {new Date(apt.date).toLocaleDateString()}
                         </span>
                         <span
-                          className={`px-2 py-1 rounded-full text-xs ${
+                          className={`px-2 py-0.5 rounded-full text-xs ${
                             apt.status === "completed"
-                              ? "bg-success-100 text-success-700"
-                              : "bg-primary-100 text-primary-700"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-blue-100 text-blue-700"
                           }`}
                         >
                           {apt.status}
                         </span>
                       </div>
-                      <p className="text-sm text-secondary-600 mt-1">
-                        {apt.problem?.description}
+                      <p className="text-sm text-secondary-600">
+                        {apt.problem?.description || "No description"}
                       </p>
+                      {apt.prescriptionId && (
+                        <div className="flex items-center space-x-1 mt-2 text-xs text-primary-600">
+                          <FaPrescription />
+                          <span>Prescription available</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -381,13 +436,15 @@ const Patients = () => {
             {patientHistory.prescriptions?.length > 0 && (
               <div>
                 <h4 className="font-medium mb-3 flex items-center space-x-2">
-                  <FaFileMedical className="text-primary-500" />
+                  <FaFileMedical className="text-green-500" />
                   <span>Previous Prescriptions</span>
                 </h4>
                 <div className="space-y-2">
                   {patientHistory.prescriptions.slice(0, 5).map((rx, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl">
-                      <p className="font-medium">{formatDate(rx.date)}</p>
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
+                      <p className="font-medium">
+                        {new Date(rx.date).toLocaleDateString()}
+                      </p>
                       <p className="text-sm text-secondary-700 mt-1">
                         {rx.diagnosis}
                       </p>
@@ -413,4 +470,4 @@ const Patients = () => {
   );
 };
 
-export default Patients;
+export default DoctorPatients;
