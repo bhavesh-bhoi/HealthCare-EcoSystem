@@ -9,6 +9,8 @@ import {
   FaPills,
   FaFlask,
   FaEye,
+  FaFilter,
+  FaSearch,
 } from "react-icons/fa";
 import { patientAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
@@ -16,13 +18,13 @@ import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate } from "../../Utils/helpers.js";
 
 const Prescriptions = () => {
   const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchPrescriptions();
@@ -31,8 +33,10 @@ const Prescriptions = () => {
   const fetchPrescriptions = async () => {
     try {
       const response = await patientAPI.getPrescriptions();
-      setPrescriptions(response.data.data);
+      console.log("Prescriptions:", response.data);
+      setPrescriptions(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load prescriptions:", error);
       toast.error("Failed to load prescriptions");
     } finally {
       setLoading(false);
@@ -40,18 +44,39 @@ const Prescriptions = () => {
   };
 
   const handleDownload = (prescription) => {
-    // In a real app, this would generate a PDF
+    // Generate PDF content
+    const content = `
+      Prescription #${prescription.prescriptionId}
+      Date: ${new Date(prescription.date).toLocaleDateString()}
+      Doctor: Dr. ${prescription.doctorId?.userId?.name}
+      Diagnosis: ${prescription.diagnosis}
+      
+      Medicines:
+      ${prescription.medicines?.map((m) => `- ${m.name}: ${m.dosage}, ${m.frequency} for ${m.duration}`).join("\n")}
+      
+      Notes: ${prescription.notes || "None"}
+    `;
+
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `prescription-${prescription.prescriptionId}.txt`;
+    a.click();
     toast.success("Download started");
   };
 
-  const handlePrint = (prescription) => {
-    window.print();
-  };
-
   const filteredPrescriptions = prescriptions.filter((p) => {
-    if (filter === "all") return true;
-    if (filter === "active") return p.isActive;
-    if (filter === "expired") return !p.isActive;
+    if (filter === "active" && !p.isActive) return false;
+    if (filter === "expired" && p.isActive) return false;
+    if (searchTerm) {
+      const doctorName = p.doctorId?.userId?.name?.toLowerCase() || "";
+      const diagnosis = p.diagnosis?.toLowerCase() || "";
+      return (
+        doctorName.includes(searchTerm.toLowerCase()) ||
+        diagnosis.includes(searchTerm.toLowerCase())
+      );
+    }
     return true;
   });
 
@@ -74,21 +99,29 @@ const Prescriptions = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-2 overflow-x-auto pb-2">
-        {["all", "active", "expired"].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-full text-sm font-medium capitalize transition-all ${
-              filter === status
-                ? "gradient-bg text-white shadow-medium"
-                : "bg-gray-100 text-secondary-600 hover:bg-gray-200"
-            }`}
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search by doctor or diagnosis..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
           >
-            {status}
-          </button>
-        ))}
-      </div>
+            <option value="all">All Prescriptions</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+          </select>
+        </div>
+      </Card>
 
       {/* Prescriptions List */}
       {filteredPrescriptions.length === 0 ? (
@@ -98,7 +131,9 @@ const Prescriptions = () => {
             No prescriptions found
           </h3>
           <p className="text-secondary-600">
-            Your prescriptions will appear here after doctor visits
+            {searchTerm
+              ? "Try adjusting your search"
+              : "Your prescriptions will appear here"}
           </p>
         </Card>
       ) : (
@@ -108,12 +143,12 @@ const Prescriptions = () => {
               key={prescription._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Card>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4">
-                    <div className="p-3 gradient-bg rounded-xl">
+                    <div className="p-3 bg-gradient-to-r from-primary-600 to-teal-600 rounded-xl">
                       <FaFileMedical className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -124,7 +159,7 @@ const Prescriptions = () => {
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${
                             prescription.isActive
-                              ? "bg-success-100 text-success-700"
+                              ? "bg-green-100 text-green-700"
                               : "bg-gray-100 text-gray-700"
                           }`}
                         >
@@ -135,11 +170,16 @@ const Prescriptions = () => {
                       <div className="flex items-center space-x-4 text-sm text-secondary-600 mb-3">
                         <div className="flex items-center space-x-1">
                           <FaUserMd className="w-4 h-4" />
-                          <span>Dr. {prescription.doctorId?.userId?.name}</span>
+                          <span>
+                            Dr.{" "}
+                            {prescription.doctorId?.userId?.name || "Unknown"}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <FaCalendarAlt className="w-4 h-4" />
-                          <span>{formatDate(prescription.date)}</span>
+                          <span>
+                            {new Date(prescription.date).toLocaleDateString()}
+                          </span>
                         </div>
                       </div>
 
@@ -166,8 +206,11 @@ const Prescriptions = () => {
                       </div>
 
                       {prescription.followUpDate && (
-                        <p className="text-xs text-warning-600 mt-3">
-                          Follow-up: {formatDate(prescription.followUpDate)}
+                        <p className="text-xs text-orange-600 mt-3">
+                          Follow-up:{" "}
+                          {new Date(
+                            prescription.followUpDate,
+                          ).toLocaleDateString()}
                         </p>
                       )}
                     </div>
@@ -179,9 +222,7 @@ const Prescriptions = () => {
                       size="sm"
                       icon={FaEye}
                       onClick={() => setSelectedPrescription(prescription)}
-                    >
-                      View
-                    </Button>
+                    />
                     <Button
                       variant="outline"
                       size="sm"
@@ -192,7 +233,7 @@ const Prescriptions = () => {
                       variant="outline"
                       size="sm"
                       icon={FaPrint}
-                      onClick={() => handlePrint(prescription)}
+                      onClick={() => window.print()}
                     />
                   </div>
                 </div>
@@ -223,8 +264,8 @@ const Prescriptions = () => {
 
             {/* Doctor & Patient Info */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-secondary-500">Doctor</p>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Doctor</p>
                 <p className="font-medium">
                   Dr. {selectedPrescription.doctorId?.userId?.name}
                 </p>
@@ -232,10 +273,10 @@ const Prescriptions = () => {
                   {selectedPrescription.doctorId?.specialization}
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-secondary-500">Date</p>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Date</p>
                 <p className="font-medium">
-                  {formatDate(selectedPrescription.date)}
+                  {new Date(selectedPrescription.date).toLocaleDateString()}
                 </p>
               </div>
             </div>
@@ -243,7 +284,7 @@ const Prescriptions = () => {
             {/* Diagnosis */}
             <div>
               <h3 className="font-medium mb-2">Diagnosis</h3>
-              <p className="text-secondary-700">
+              <p className="text-secondary-700 bg-gray-50 p-3 rounded-lg">
                 {selectedPrescription.diagnosis}
               </p>
             </div>
@@ -257,7 +298,7 @@ const Prescriptions = () => {
                 </h3>
                 <div className="space-y-3">
                   {selectedPrescription.medicines.map((medicine, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl">
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium">{medicine.name}</span>
                         <span className="text-sm text-primary-600">
@@ -294,7 +335,7 @@ const Prescriptions = () => {
                 </h3>
                 <div className="space-y-2">
                   {selectedPrescription.tests.map((test, idx) => (
-                    <div key={idx} className="p-3 bg-gray-50 rounded-xl">
+                    <div key={idx} className="p-3 bg-gray-50 rounded-lg">
                       <p className="font-medium">{test.name}</p>
                       {test.instructions && (
                         <p className="text-sm text-secondary-600 mt-1">
@@ -311,7 +352,7 @@ const Prescriptions = () => {
             {selectedPrescription.notes && (
               <div>
                 <h3 className="font-medium mb-2">Additional Notes</h3>
-                <p className="text-secondary-700 bg-gray-50 p-3 rounded-xl">
+                <p className="text-secondary-700 bg-gray-50 p-3 rounded-lg">
                   {selectedPrescription.notes}
                 </p>
               </div>
@@ -319,11 +360,13 @@ const Prescriptions = () => {
 
             {/* Follow-up */}
             {selectedPrescription.followUpDate && (
-              <div className="p-4 bg-primary-50 rounded-xl">
+              <div className="p-4 bg-primary-50 rounded-lg">
                 <p className="font-medium mb-1">Follow-up Appointment</p>
                 <p className="text-primary-700">
                   Schedule a follow-up on{" "}
-                  {formatDate(selectedPrescription.followUpDate)}
+                  {new Date(
+                    selectedPrescription.followUpDate,
+                  ).toLocaleDateString()}
                 </p>
               </div>
             )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   FaCalendarAlt,
   FaVideo,
@@ -8,26 +8,23 @@ import {
   FaClock,
   FaUserMd,
   FaFileMedical,
-  FaTimes,
-  FaCheckCircle,
-  FaExclamationCircle,
+  FaStar,
+  FaFilter,
+  FaSearch,
 } from "react-icons/fa";
-import { MdCancel, MdPending } from "react-icons/md";
 import { patientAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
 import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate, formatTime } from "../../Utils/helpers.js";
 
 const Appointments = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
   const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     fetchAppointments();
@@ -36,64 +33,48 @@ const Appointments = () => {
   const fetchAppointments = async () => {
     try {
       const response = await patientAPI.getAppointments();
-      setAppointments(response.data.data);
+      console.log("Appointments:", response.data);
+      setAppointments(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load appointments:", error);
       toast.error("Failed to load appointments");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancelAppointment = async () => {
-    if (!cancelReason.trim()) {
-      toast.error("Please provide a reason for cancellation");
-      return;
-    }
-
+  const handleCancelAppointment = async (id) => {
     try {
-      await patientAPI.cancelAppointment(selectedAppointment._id, cancelReason);
+      await patientAPI.cancelAppointment(id, "Cancelled by patient");
       toast.success("Appointment cancelled successfully");
-      setShowCancelModal(false);
-      setCancelReason("");
       fetchAppointments();
     } catch (error) {
       toast.error("Failed to cancel appointment");
     }
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "confirmed":
-        return <FaCheckCircle className="w-5 h-5 text-success-500" />;
-      case "pending":
-        return <MdPending className="w-5 h-5 text-warning-500" />;
-      case "cancelled":
-        return <MdCancel className="w-5 h-5 text-error-500" />;
-      case "completed":
-        return <FaCheckCircle className="w-5 h-5 text-primary-500" />;
-      default:
-        return <FaExclamationCircle className="w-5 h-5 text-secondary-500" />;
-    }
-  };
-
   const getStatusColor = (status) => {
     switch (status) {
       case "confirmed":
-        return "bg-success-100 text-success-700 border-success-200";
+        return "bg-green-100 text-green-700";
       case "pending":
-        return "bg-warning-100 text-warning-700 border-warning-200";
-      case "cancelled":
-        return "bg-error-100 text-error-700 border-error-200";
+        return "bg-yellow-100 text-yellow-700";
       case "completed":
-        return "bg-primary-100 text-primary-700 border-primary-200";
+        return "bg-blue-100 text-blue-700";
+      case "cancelled":
+        return "bg-red-100 text-red-700";
       default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
-  const filteredAppointments = appointments.filter((app) => {
-    if (filter === "all") return true;
-    return app.status === filter;
+  const filteredAppointments = appointments.filter((apt) => {
+    if (filter !== "all" && apt.status !== filter) return false;
+    if (searchTerm) {
+      const doctorName = apt.doctorId?.userId?.name?.toLowerCase() || "";
+      return doctorName.includes(searchTerm.toLowerCase());
+    }
+    return true;
   });
 
   if (loading) {
@@ -112,29 +93,35 @@ const Appointments = () => {
             Manage and track your appointments
           </p>
         </div>
-        <Button to="/patient/book-appointment" icon={FaCalendarAlt}>
-          Book New Appointment
-        </Button>
+        <Button to="/patient/book-appointment">+ New Appointment</Button>
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-2 overflow-x-auto pb-2">
-        {["all", "pending", "confirmed", "completed", "cancelled"].map(
-          (status) => (
-            <button
-              key={status}
-              onClick={() => setFilter(status)}
-              className={`px-4 py-2 rounded-full text-sm font-medium capitalize transition-all ${
-                filter === status
-                  ? "gradient-bg text-white shadow-medium"
-                  : "bg-gray-100 text-secondary-600 hover:bg-gray-200"
-              }`}
-            >
-              {status}
-            </button>
-          ),
-        )}
-      </div>
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search by doctor name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+          >
+            <option value="all">All Appointments</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </Card>
 
       {/* Appointments List */}
       {filteredAppointments.length === 0 ? (
@@ -144,11 +131,11 @@ const Appointments = () => {
             No appointments found
           </h3>
           <p className="text-secondary-600 mb-4">
-            {filter === "all"
-              ? "You haven't booked any appointments yet"
-              : `No ${filter} appointments`}
+            {searchTerm
+              ? "Try adjusting your search"
+              : "Book your first appointment"}
           </p>
-          <Button to="/patient/book-appointment">Book an Appointment</Button>
+          <Button to="/patient/book-appointment">Book Appointment</Button>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -157,43 +144,46 @@ const Appointments = () => {
               key={appointment._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <Card className="hover:shadow-medium transition-all">
+              <Card>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   {/* Doctor Info */}
                   <div className="flex items-center space-x-4">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center">
-                        <FaUserMd className="w-8 h-8 text-white" />
-                      </div>
-                      <div className="absolute -bottom-1 -right-1">
-                        {getStatusIcon(appointment.status)}
-                      </div>
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-r from-primary-600 to-teal-600 flex items-center justify-center">
+                      <FaUserMd className="w-8 h-8 text-white" />
                     </div>
                     <div>
                       <h3 className="font-display font-semibold text-secondary-800">
-                        Dr. {appointment.doctorId?.userId?.name}
+                        Dr. {appointment.doctorId?.userId?.name || "Loading..."}
                       </h3>
-                      <p className="text-sm text-secondary-600">
-                        {appointment.doctorId?.specialization}
+                      <p className="text-sm text-primary-600">
+                        {appointment.doctorId?.specialization ||
+                          "General Physician"}
                       </p>
+                      <div className="flex items-center space-x-2 mt-1">
+                        <FaStar className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm">
+                          {appointment.doctorId?.rating?.toFixed(1) || "4.5"}
+                        </span>
+                        <span className="text-xs text-secondary-500">
+                          ({appointment.doctorId?.totalReviews || 0} reviews)
+                        </span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Date & Time */}
-                  <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                       <FaCalendarAlt className="w-4 h-4 text-primary-500" />
                       <span className="text-sm">
-                        {formatDate(appointment.date)}
+                        {new Date(appointment.date).toLocaleDateString()}
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <FaClock className="w-4 h-4 text-primary-500" />
-                      <span className="text-sm">
-                        {formatTime(appointment.startTime)}
-                      </span>
+                      <span className="text-sm">{appointment.startTime}</span>
                     </div>
                   </div>
 
@@ -201,10 +191,10 @@ const Appointments = () => {
                   <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-1 px-3 py-1 bg-gray-100 rounded-full">
                       {appointment.mode === "online" && (
-                        <FaVideo className="w-3 h-3 text-primary-500" />
+                        <FaVideo className="w-3 h-3 text-blue-500" />
                       )}
                       {appointment.mode === "home" && (
-                        <FaHome className="w-3 h-3 text-success-500" />
+                        <FaHome className="w-3 h-3 text-green-500" />
                       )}
                       {appointment.mode === "clinic" && (
                         <FaMapMarkerAlt className="w-3 h-3 text-orange-500" />
@@ -227,17 +217,14 @@ const Appointments = () => {
                       size="sm"
                       onClick={() => setSelectedAppointment(appointment)}
                     >
-                      View Details
+                      Details
                     </Button>
                     {appointment.status === "confirmed" && (
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-error-600 border-error-200 hover:bg-error-50"
-                        onClick={() => {
-                          setSelectedAppointment(appointment);
-                          setShowCancelModal(true);
-                        }}
+                        className="text-red-600"
+                        onClick={() => handleCancelAppointment(appointment._id)}
                       >
                         Cancel
                       </Button>
@@ -245,7 +232,6 @@ const Appointments = () => {
                     {appointment.mode === "online" &&
                       appointment.status === "confirmed" && (
                         <Button
-                          variant="primary"
                           size="sm"
                           icon={FaVideo}
                           onClick={() =>
@@ -258,6 +244,16 @@ const Appointments = () => {
                           Join
                         </Button>
                       )}
+                    {appointment.prescriptionId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={FaFileMedical}
+                        to={`/patient/prescriptions/${appointment.prescriptionId}`}
+                      >
+                        Prescription
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -278,173 +274,61 @@ const Appointments = () => {
 
       {/* Appointment Details Modal */}
       <Modal
-        isOpen={selectedAppointment && !showCancelModal}
+        isOpen={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
         title="Appointment Details"
-        size="lg"
       >
         {selectedAppointment && (
-          <div className="space-y-6">
-            {/* Status Badge */}
-            <div className="flex justify-center">
-              <span
-                className={`px-4 py-2 rounded-full text-sm font-medium capitalize ${getStatusColor(selectedAppointment.status)}`}
-              >
-                {selectedAppointment.status}
-              </span>
-            </div>
-
-            {/* Doctor Info */}
+          <div className="space-y-4">
             <div className="text-center">
-              <div className="w-20 h-20 rounded-full gradient-bg flex items-center justify-center mx-auto mb-3">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-r from-primary-600 to-teal-600 flex items-center justify-center mx-auto mb-3">
                 <FaUserMd className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl font-display font-semibold text-secondary-800">
+              <h3 className="text-xl font-display font-semibold">
                 Dr. {selectedAppointment.doctorId?.userId?.name}
               </h3>
-              <p className="text-secondary-600">
+              <p className="text-primary-600">
                 {selectedAppointment.doctorId?.specialization}
               </p>
             </div>
 
-            {/* Appointment Details Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-sm text-secondary-500 mb-1">Date</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Date</p>
                 <p className="font-medium">
-                  {formatDate(selectedAppointment.date)}
+                  {new Date(selectedAppointment.date).toLocaleDateString()}
                 </p>
               </div>
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-sm text-secondary-500 mb-1">Time</p>
-                <p className="font-medium">
-                  {formatTime(selectedAppointment.startTime)}
-                </p>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Time</p>
+                <p className="font-medium">{selectedAppointment.startTime}</p>
               </div>
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-sm text-secondary-500 mb-1">Mode</p>
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Mode</p>
                 <p className="font-medium capitalize">
                   {selectedAppointment.mode}
                 </p>
               </div>
-              <div className="p-4 bg-gray-50 rounded-xl">
-                <p className="text-sm text-secondary-500 mb-1">Duration</p>
-                <p className="font-medium">
-                  {selectedAppointment.duration} minutes
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-secondary-500">Status</p>
+                <p
+                  className={`font-medium capitalize ${getStatusColor(selectedAppointment.status)}`}
+                >
+                  {selectedAppointment.status}
                 </p>
               </div>
             </div>
 
-            {/* Problem Details */}
-            {selectedAppointment.problem && (
-              <div className="space-y-3">
-                <h4 className="font-medium">Problem Description</h4>
-                <p className="text-secondary-600">
+            {selectedAppointment.problem?.description && (
+              <div>
+                <h4 className="font-medium mb-2">Problem Description</h4>
+                <p className="text-secondary-600 bg-gray-50 p-3 rounded-lg">
                   {selectedAppointment.problem.description}
                 </p>
-
-                {selectedAppointment.problem.symptoms?.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Symptoms:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAppointment.problem.symptoms.map(
-                        (symptom, idx) => (
-                          <span
-                            key={idx}
-                            className="px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-sm"
-                          >
-                            {symptom}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Video Call Info */}
-            {selectedAppointment.mode === "online" &&
-              selectedAppointment.videoCallDetails && (
-                <div className="p-4 bg-primary-50 rounded-xl">
-                  <h4 className="font-medium mb-2">Video Consultation</h4>
-                  <Button
-                    variant="primary"
-                    className="w-full"
-                    icon={FaVideo}
-                    onClick={() =>
-                      window.open(
-                        selectedAppointment.videoCallDetails.roomUrl,
-                        "_blank",
-                      )
-                    }
-                  >
-                    Join Video Call
-                  </Button>
-                </div>
-              )}
-
-            {/* Prescription Link */}
-            {selectedAppointment.prescriptionId && (
-              <div className="p-4 bg-success-50 rounded-xl">
-                <h4 className="font-medium mb-2">Prescription Available</h4>
-                <Button
-                  variant="secondary"
-                  className="w-full"
-                  icon={FaFileMedical}
-                  to={`/patient/prescriptions/${selectedAppointment.prescriptionId}`}
-                >
-                  View Prescription
-                </Button>
               </div>
             )}
           </div>
         )}
-      </Modal>
-
-      {/* Cancel Appointment Modal */}
-      <Modal
-        isOpen={showCancelModal}
-        onClose={() => {
-          setShowCancelModal(false);
-          setCancelReason("");
-        }}
-        title="Cancel Appointment"
-      >
-        <div className="space-y-4">
-          <p className="text-secondary-600">
-            Are you sure you want to cancel this appointment? This action cannot
-            be undone.
-          </p>
-
-          <textarea
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="Please provide a reason for cancellation"
-            className="w-full p-3 rounded-xl border-2 border-gray-200 focus:border-primary-500 outline-none transition-all"
-            rows="4"
-          />
-
-          <div className="flex space-x-3">
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => {
-                setShowCancelModal(false);
-                setCancelReason("");
-              }}
-            >
-              Keep Appointment
-            </Button>
-            <Button
-              variant="primary"
-              className="flex-1 bg-error-600 hover:bg-error-700"
-              onClick={handleCancelAppointment}
-            >
-              Yes, Cancel
-            </Button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

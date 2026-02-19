@@ -12,6 +12,8 @@ import {
   FaRupeeSign,
   FaEye,
   FaStar,
+  FaFilter,
+  FaSearch,
 } from "react-icons/fa";
 import { patientAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
@@ -19,13 +21,13 @@ import Button from "../../Components/Common/Button.jsx";
 import Modal from "../../Components/Common/Modal.jsx";
 import PulseLoader from "../../Components/Animations/PulseLoader.jsx";
 import toast from "react-hot-toast";
-import { formatDate, formatCurrency } from "../../Utils/helpers.js";
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -37,16 +39,14 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       const response = await patientAPI.getOrders();
-      setOrders(response.data.data);
+      console.log("Orders:", response.data);
+      setOrders(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load orders:", error);
       toast.error("Failed to load orders");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleTrackOrder = (orderId) => {
-    navigate(`/patient/orders/${orderId}/track`);
   };
 
   const handleReorder = async (order) => {
@@ -58,9 +58,15 @@ const Orders = () => {
         deliveryAddress: order.deliveryAddress,
       });
       toast.success("Order placed successfully!");
+      fetchOrders();
     } catch (error) {
       toast.error("Failed to place order");
     }
+  };
+
+  const handleTrackOrder = (orderId) => {
+    // Implement tracking logic
+    toast.success("Tracking feature coming soon");
   };
 
   const handleSubmitRating = async () => {
@@ -83,32 +89,42 @@ const Orders = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case "delivered":
-        return <FaCheckCircle className="w-5 h-5 text-success-500" />;
+        return <FaCheckCircle className="w-5 h-5 text-green-500" />;
       case "cancelled":
-        return <FaTimesCircle className="w-5 h-5 text-error-500" />;
+        return <FaTimesCircle className="w-5 h-5 text-red-500" />;
       case "out_for_delivery":
-        return <FaTruck className="w-5 h-5 text-primary-500" />;
+        return <FaTruck className="w-5 h-5 text-blue-500" />;
       default:
-        return <FaClock className="w-5 h-5 text-warning-500" />;
+        return <FaClock className="w-5 h-5 text-yellow-500" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case "delivered":
-        return "bg-success-100 text-success-700";
+        return "bg-green-100 text-green-700";
       case "cancelled":
-        return "bg-error-100 text-error-700";
+        return "bg-red-100 text-red-700";
       case "out_for_delivery":
-        return "bg-primary-100 text-primary-700";
+        return "bg-blue-100 text-blue-700";
+      case "preparing":
+        return "bg-yellow-100 text-yellow-700";
       default:
-        return "bg-warning-100 text-warning-700";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
   const filteredOrders = orders.filter((order) => {
-    if (filter === "all") return true;
-    return order.status === filter;
+    if (filter !== "all" && order.status !== filter) return false;
+    if (searchTerm) {
+      const pharmacyName = order.pharmacyId?.userId?.name?.toLowerCase() || "";
+      const orderId = order.orderId?.toLowerCase() || "";
+      return (
+        pharmacyName.includes(searchTerm.toLowerCase()) ||
+        orderId.includes(searchTerm.toLowerCase())
+      );
+    }
+    return true;
   });
 
   if (loading) {
@@ -130,29 +146,33 @@ const Orders = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-2 overflow-x-auto pb-2">
-        {[
-          "all",
-          "pending",
-          "confirmed",
-          "preparing",
-          "out_for_delivery",
-          "delivered",
-          "cancelled",
-        ].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-full text-sm font-medium capitalize whitespace-nowrap transition-all ${
-              filter === status
-                ? "gradient-bg text-white shadow-medium"
-                : "bg-gray-100 text-secondary-600 hover:bg-gray-200"
-            }`}
+      <Card>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search by pharmacy or order ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
+            />
+          </div>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200"
           >
-            {status.replace("_", " ")}
-          </button>
-        ))}
-      </div>
+            <option value="all">All Orders</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="preparing">Preparing</option>
+            <option value="out_for_delivery">Out for Delivery</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+      </Card>
 
       {/* Orders List */}
       {filteredOrders.length === 0 ? (
@@ -162,9 +182,9 @@ const Orders = () => {
             No orders found
           </h3>
           <p className="text-secondary-600 mb-4">
-            {filter === "all"
-              ? "You haven't placed any orders yet"
-              : `No ${filter} orders`}
+            {searchTerm
+              ? "Try adjusting your search"
+              : "You haven't placed any orders yet"}
           </p>
           <Button to="/patient/prescriptions">Order from Prescriptions</Button>
         </Card>
@@ -175,14 +195,14 @@ const Orders = () => {
               key={order._id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Card>
                 <div className="flex flex-col space-y-4">
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 gradient-bg rounded-lg">
+                      <div className="p-2 bg-gradient-to-r from-primary-600 to-teal-600 rounded-lg">
                         <FaBox className="w-4 h-4 text-white" />
                       </div>
                       <div>
@@ -199,16 +219,17 @@ const Orders = () => {
                   </div>
 
                   {/* Pharmacy Info */}
-                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                     <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
                       <FaUser className="w-5 h-5 text-primary-600" />
                     </div>
                     <div>
                       <p className="font-medium">
-                        {order.pharmacyId?.userId?.name}
+                        {order.pharmacyId?.userId?.name || "Pharmacy"}
                       </p>
                       <p className="text-xs text-secondary-500">
-                        {order.pharmacyId?.location?.address}
+                        {order.pharmacyId?.location?.address ||
+                          "Address not available"}
                       </p>
                     </div>
                   </div>
@@ -216,10 +237,10 @@ const Orders = () => {
                   {/* Items Preview */}
                   <div>
                     <p className="text-sm font-medium mb-2">
-                      Items ({order.items.length})
+                      Items ({order.items?.length || 0})
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {order.items.slice(0, 3).map((item, idx) => (
+                      {order.items?.slice(0, 3).map((item, idx) => (
                         <span
                           key={idx}
                           className="px-2 py-1 bg-primary-50 text-primary-700 rounded-full text-xs"
@@ -227,7 +248,7 @@ const Orders = () => {
                           {item.name} x{item.quantity}
                         </span>
                       ))}
-                      {order.items.length > 3 && (
+                      {order.items?.length > 3 && (
                         <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs">
                           +{order.items.length - 3} more
                         </span>
@@ -239,7 +260,7 @@ const Orders = () => {
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center space-x-4">
                       <span className="text-secondary-500">
-                        {formatDate(order.createdAt)}
+                        {new Date(order.createdAt).toLocaleDateString()}
                       </span>
                       <span className="font-medium flex items-center">
                         <FaRupeeSign className="w-3 h-3" />
@@ -254,9 +275,7 @@ const Orders = () => {
                         size="sm"
                         icon={FaEye}
                         onClick={() => setSelectedOrder(order)}
-                      >
-                        Details
-                      </Button>
+                      />
                       {order.status === "out_for_delivery" && (
                         <Button
                           variant="outline"
@@ -281,27 +300,12 @@ const Orders = () => {
                         </Button>
                       )}
                       {order.status === "delivered" && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => handleReorder(order)}
-                        >
+                        <Button size="sm" onClick={() => handleReorder(order)}>
                           Reorder
                         </Button>
                       )}
                     </div>
                   </div>
-
-                  {/* Delivery Info */}
-                  {order.estimatedDeliveryTime && (
-                    <div className="flex items-center space-x-2 text-xs text-primary-600 bg-primary-50 p-2 rounded-lg">
-                      <FaClock />
-                      <span>
-                        Estimated delivery:{" "}
-                        {formatDate(order.estimatedDeliveryTime)}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </Card>
             </motion.div>
@@ -333,7 +337,7 @@ const Orders = () => {
             </div>
 
             {/* Pharmacy Info */}
-            <div className="p-4 bg-gray-50 rounded-xl">
+            <div className="p-4 bg-gray-50 rounded-lg">
               <h3 className="font-medium mb-2">Pharmacy</h3>
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
@@ -357,10 +361,10 @@ const Orders = () => {
             <div>
               <h3 className="font-medium mb-3">Order Items</h3>
               <div className="space-y-3">
-                {selectedOrder.items.map((item, idx) => (
+                {selectedOrder.items?.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
                     <div>
                       <p className="font-medium">{item.name}</p>
@@ -398,7 +402,7 @@ const Orders = () => {
                   </span>
                 </div>
                 {selectedOrder.discountAmount > 0 && (
-                  <div className="flex justify-between text-sm text-success-600">
+                  <div className="flex justify-between text-sm text-green-600">
                     <span>Discount</span>
                     <span>- ₹{selectedOrder.discountAmount}</span>
                   </div>
@@ -434,12 +438,12 @@ const Orders = () => {
                 <span>Delivery Address</span>
               </h3>
               <p className="text-secondary-700">
-                {selectedOrder.deliveryAddress.address}
+                {selectedOrder.deliveryAddress?.address}
               </p>
               <p className="text-sm text-secondary-600">
-                {selectedOrder.deliveryAddress.city},{" "}
-                {selectedOrder.deliveryAddress.state} -{" "}
-                {selectedOrder.deliveryAddress.pincode}
+                {selectedOrder.deliveryAddress?.city},{" "}
+                {selectedOrder.deliveryAddress?.state} -{" "}
+                {selectedOrder.deliveryAddress?.pincode}
               </p>
             </div>
 
@@ -456,7 +460,7 @@ const Orders = () => {
                           {track.status.replace("_", " ")}
                         </p>
                         <p className="text-xs text-secondary-500">
-                          {formatDate(track.timestamp)}
+                          {new Date(track.timestamp).toLocaleString()}
                         </p>
                         {track.note && (
                           <p className="text-sm text-secondary-600 mt-1">
@@ -466,26 +470,6 @@ const Orders = () => {
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-            )}
-
-            {/* Delivery Partner */}
-            {selectedOrder.deliveryPartner && (
-              <div className="p-4 bg-primary-50 rounded-xl">
-                <h3 className="font-medium mb-2">Delivery Partner</h3>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <FaTruck className="text-primary-600" />
-                    <span>{selectedOrder.deliveryPartner.name}</span>
-                  </div>
-                  <a
-                    href={`tel:${selectedOrder.deliveryPartner.phone}`}
-                    className="flex items-center space-x-1 text-primary-600"
-                  >
-                    <FaPhone className="w-3 h-3" />
-                    <span className="text-sm">Call</span>
-                  </a>
                 </div>
               </div>
             )}
@@ -521,8 +505,8 @@ const Orders = () => {
                   <FaStar
                     className={`w-8 h-8 transition-all ${
                       star <= rating
-                        ? "text-warning-500"
-                        : "text-gray-300 hover:text-warning-300"
+                        ? "text-yellow-400"
+                        : "text-gray-300 hover:text-yellow-300"
                     }`}
                   />
                 </button>
@@ -551,11 +535,7 @@ const Orders = () => {
             >
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              className="flex-1"
-              onClick={handleSubmitRating}
-            >
+            <Button className="flex-1" onClick={handleSubmitRating}>
               Submit Review
             </Button>
           </div>

@@ -9,9 +9,10 @@ import {
   FaHome,
   FaMapMarkerAlt,
   FaSearch,
-  FaFilter,
   FaStar,
   FaMapPin,
+  FaRupeeSign,
+  FaCheckCircle,
 } from "react-icons/fa";
 import { patientAPI } from "../../services/api.js";
 import Card from "../../Components/Common/Card.jsx";
@@ -60,9 +61,16 @@ const BookAppointment = () => {
   const fetchDoctors = async () => {
     setLoading(true);
     try {
-      const response = await patientAPI.getDoctors(filters);
-      setDoctors(response.data.data);
+      const params = {};
+      if (filters.specialization)
+        params.specialization = filters.specialization;
+      if (filters.location) params.location = filters.location;
+
+      const response = await patientAPI.getDoctors(params);
+      console.log("Doctors:", response.data);
+      setDoctors(response.data.data || []);
     } catch (error) {
+      console.error("Failed to load doctors:", error);
       toast.error("Failed to load doctors");
     } finally {
       setLoading(false);
@@ -84,17 +92,21 @@ const BookAppointment = () => {
     try {
       const appointmentData = {
         doctorId: selectedDoctor._id,
-        date: selectedDate,
+        date: selectedDate.toISOString(),
         startTime: selectedSlot,
         mode: consultationMode,
         problem,
       };
 
       const response = await patientAPI.bookAppointment(appointmentData);
+      console.log("Appointment booked:", response.data);
       toast.success("Appointment booked successfully!");
-      navigate(`/patient/appointments/${response.data.data._id}`);
+      navigate("/patient/appointments");
     } catch (error) {
-      toast.error("Failed to book appointment");
+      console.error("Booking error:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to book appointment",
+      );
     } finally {
       setLoading(false);
     }
@@ -126,7 +138,7 @@ const BookAppointment = () => {
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                 step >= 1
-                  ? "gradient-bg text-white"
+                  ? "bg-gradient-to-r from-primary-600 to-teal-600 text-white"
                   : "bg-gray-200 text-secondary-600"
               }`}
             >
@@ -134,13 +146,15 @@ const BookAppointment = () => {
             </div>
             <div
               className={`w-16 h-1 rounded-full transition-all ${
-                step >= 2 ? "gradient-bg" : "bg-gray-200"
+                step >= 2
+                  ? "bg-gradient-to-r from-primary-600 to-teal-600"
+                  : "bg-gray-200"
               }`}
             />
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                 step >= 2
-                  ? "gradient-bg text-white"
+                  ? "bg-gradient-to-r from-primary-600 to-teal-600 text-white"
                   : "bg-gray-200 text-secondary-600"
               }`}
             >
@@ -148,13 +162,15 @@ const BookAppointment = () => {
             </div>
             <div
               className={`w-16 h-1 rounded-full transition-all ${
-                step >= 3 ? "gradient-bg" : "bg-gray-200"
+                step >= 3
+                  ? "bg-gradient-to-r from-primary-600 to-teal-600"
+                  : "bg-gray-200"
               }`}
             />
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                 step >= 3
-                  ? "gradient-bg text-white"
+                  ? "bg-gradient-to-r from-primary-600 to-teal-600 text-white"
                   : "bg-gray-200 text-secondary-600"
               }`}
             >
@@ -218,66 +234,73 @@ const BookAppointment = () => {
             <PulseLoader size="md" />
           ) : (
             <div className="space-y-4">
-              {doctors.map((doctor, index) => (
-                <motion.div
-                  key={doctor._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card
-                    className={`cursor-pointer transition-all ${
-                      selectedDoctor?._id === doctor._id
-                        ? "border-2 border-primary-600 shadow-medium"
-                        : "hover:shadow-medium"
-                    }`}
-                    onClick={() => setSelectedDoctor(doctor)}
+              {doctors.length === 0 ? (
+                <Card className="text-center py-12">
+                  <FaUserMd className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-secondary-600">No doctors found</p>
+                </Card>
+              ) : (
+                doctors.map((doctor, index) => (
+                  <motion.div
+                    key={doctor._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
                   >
-                    <div className="flex items-start space-x-4">
-                      <div className="w-16 h-16 rounded-full gradient-bg flex items-center justify-center">
-                        <FaUserMd className="w-8 h-8 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-display font-semibold text-secondary-800">
-                              Dr. {doctor.userId?.name}
-                            </h3>
-                            <p className="text-primary-600">
-                              {doctor.specialization}
-                            </p>
+                    <Card
+                      className={`cursor-pointer transition-all ${
+                        selectedDoctor?._id === doctor._id
+                          ? "border-2 border-primary-600 shadow-medium"
+                          : "hover:shadow-medium"
+                      }`}
+                      onClick={() => setSelectedDoctor(doctor)}
+                    >
+                      <div className="flex items-start space-x-4">
+                        <div className="w-16 h-16 rounded-full bg-gradient-to-r from-primary-600 to-teal-600 flex items-center justify-center">
+                          <FaUserMd className="w-8 h-8 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="font-display font-semibold text-secondary-800">
+                                Dr. {doctor.userId?.name}
+                              </h3>
+                              <p className="text-primary-600">
+                                {doctor.specialization}
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <FaStar className="w-4 h-4 text-yellow-400" />
+                              <span className="font-medium">
+                                {doctor.rating?.toFixed(1) || "4.5"}
+                              </span>
+                              <span className="text-sm text-secondary-500">
+                                ({doctor.totalReviews || 0} reviews)
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-1">
-                            <FaStar className="w-4 h-4 text-warning-500" />
-                            <span className="font-medium">
-                              {doctor.rating?.toFixed(1)}
-                            </span>
-                            <span className="text-sm text-secondary-500">
-                              ({doctor.totalReviews} reviews)
-                            </span>
+
+                          <div className="flex items-center space-x-4 mt-2 text-sm text-secondary-600">
+                            <span>💰 ₹{doctor.consultationFee} per visit</span>
+                            <span>📅 {doctor.experience}+ years exp</span>
+                          </div>
+
+                          <div className="flex items-center space-x-2 mt-2">
+                            {doctor.languages?.map((lang) => (
+                              <span
+                                key={lang}
+                                className="px-2 py-1 bg-gray-100 rounded-full text-xs"
+                              >
+                                {lang}
+                              </span>
+                            ))}
                           </div>
                         </div>
-
-                        <div className="flex items-center space-x-4 mt-2 text-sm text-secondary-600">
-                          <span>💰 ${doctor.consultationFee} per visit</span>
-                          <span>📅 {doctor.experience}+ years exp</span>
-                        </div>
-
-                        <div className="flex items-center space-x-2 mt-2">
-                          {doctor.languages?.map((lang) => (
-                            <span
-                              key={lang}
-                              className="px-2 py-1 bg-gray-100 rounded-full text-xs"
-                            >
-                              {lang}
-                            </span>
-                          ))}
-                        </div>
                       </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              ))}
+                    </Card>
+                  </motion.div>
+                ))
+              )}
             </div>
           )}
 
@@ -326,7 +349,7 @@ const BookAppointment = () => {
                     onClick={() => setSelectedSlot(slot)}
                     className={`p-2 rounded-lg text-sm font-medium transition-all ${
                       selectedSlot === slot
-                        ? "gradient-bg text-white"
+                        ? "bg-gradient-to-r from-primary-600 to-teal-600 text-white"
                         : "bg-gray-100 text-secondary-700 hover:bg-gray-200"
                     }`}
                   >
@@ -437,7 +460,7 @@ const BookAppointment = () => {
                     }}
                     className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
                       problem.symptoms.includes(symptom)
-                        ? "gradient-bg text-white"
+                        ? "bg-gradient-to-r from-primary-600 to-teal-600 text-white"
                         : "bg-gray-100 text-secondary-700 hover:bg-gray-200"
                     }`}
                   >
@@ -454,9 +477,9 @@ const BookAppointment = () => {
               </label>
               <div className="grid grid-cols-3 gap-4">
                 {[
-                  { value: "low", label: "Low", color: "bg-success-500" },
-                  { value: "medium", label: "Medium", color: "bg-warning-500" },
-                  { value: "high", label: "High", color: "bg-error-500" },
+                  { value: "low", label: "Low", color: "bg-green-500" },
+                  { value: "medium", label: "Medium", color: "bg-yellow-500" },
+                  { value: "high", label: "High", color: "bg-red-500" },
                 ].map((level) => (
                   <button
                     key={level.value}
@@ -497,7 +520,7 @@ const BookAppointment = () => {
                   <span className="font-medium">Mode:</span> {consultationMode}
                 </p>
                 <p>
-                  <span className="font-medium">Fee:</span> $
+                  <span className="font-medium">Fee:</span> ₹
                   {selectedDoctor?.consultationFee}
                 </p>
               </div>
